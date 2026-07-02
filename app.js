@@ -65,6 +65,7 @@
     const activityRef = db.ref('lienzo/activity');
     const cooldownsRef = db.ref('lienzo/cooldowns');
     const notifRef = db.ref('lienzo/notifications');
+    const customPaletteRef = db.ref('lienzo/customPalette');
 
     const LAST_NOTIF_KEY = 'splace_last_notification_key';
 
@@ -83,9 +84,8 @@
         { hex: "#FFFFC0", name: "Crema" }, { hex: "#9C6926", name: "Tierra" }
     ];
 
-    let palette = [...basePalette];
+    let fullPalette = [...basePalette];
     const colorIndexMap = new Map();
-    palette.forEach((c, i) => colorIndexMap.set(c.hex, i));
 
     const CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const idxToChar = i => CHARS[i];
@@ -108,6 +108,7 @@
     const gridSizeLabel = document.getElementById("gridSizeLabel");
     const customColorInput = document.getElementById("customColorInput");
     const addCustomColorBtn = document.getElementById("addCustomColor");
+    const paletteBar = document.getElementById("paletteBar");
     // Admin
     const adminImportBtn = document.getElementById("adminImportBtn");
     const importImageFile = document.getElementById("importImageFile");
@@ -131,33 +132,93 @@
     let cooldownUntil = 0;
 
     // ---------- PALETA ----------
-    function createSwatch(color, index) {
+    function rebuildColorIndexMap() {
+        colorIndexMap.clear();
+        fullPalette.forEach((c, i) => colorIndexMap.set(c.hex, i));
+    }
+
+    function createSwatch(index) {
         const sw = document.createElement("div");
         sw.className = "swatch" + (index === selectedColor ? " selected" : "");
-        sw.style.background = color.hex;
-        sw.title = color.name || color.hex;
+        sw.style.background = fullPalette[index].hex;
+        sw.title = fullPalette[index].name || fullPalette[index].hex;
         sw.addEventListener("click", () => {
             selectedColor = index;
             document.querySelectorAll(".swatch").forEach(s => s.classList.remove("selected"));
             sw.classList.add("selected");
-            selectedColorNameEl.textContent = color.name || color.hex;
+            selectedColorNameEl.textContent = fullPalette[index].name || fullPalette[index].hex;
             drawHoverOverlay();
         });
         return sw;
     }
 
-    function buildPalette() {
+    function rebuildPaletteUI() {
         paletteEl.innerHTML = "";
-        palette.forEach((color, index) => {
-            paletteEl.appendChild(createSwatch(color, index));
-        });
+        for (let i = 0; i < fullPalette.length; i++) {
+            paletteEl.appendChild(createSwatch(i));
+        }
+        if (selectedColor >= fullPalette.length) selectedColor = 0;
+        selectedColorNameEl.textContent = fullPalette[selectedColor]?.name || "Blanco";
     }
-    buildPalette();
-    selectedColorNameEl.textContent = palette[selectedColor].name;
 
-    // Añadir color personalizado (manual)
+    async function addColorToPalette(hex) {
+        const upperHex = hex.toUpperCase();
+        if (colorIndexMap.has(upperHex)) return;
+        if (fullPalette.length >= CHARS.length) {
+            if (!isAdmin) alert("Se alcanzó el máximo de colores (62).");
+            return;
+        }
+        if (auth.currentUser) {
+            try {
+                await customPaletteRef.push(upperHex);
+            } catch (e) {
+                console.error("Error al guardar color personalizado", e);
+            }
+        }
+    }
+
+    customPaletteRef.on('child_added', snap => {
+        const hex = snap.val();
+        if (typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex)) {
+            const upperHex = hex.toUpperCase();
+            if (!colorIndexMap.has(upperHex) && fullPalette.length < CHARS.length) {
+                const newColor = { hex: upperHex, name: upperHex };
+                fullPalette.push(newColor);
+                colorIndexMap.set(upperHex, fullPalette.length - 1);
+                paletteEl.appendChild(createSwatch(fullPalette.length - 1));
+                selectedColorNameEl.textContent = fullPalette[selectedColor]?.name || "Blanco";
+            }
+        }
+    });
+
+    async function loadCustomPalette() {
+        const snap = await customPaletteRef.once('value');
+        fullPalette = [...basePalette];
+        colorIndexMap.clear();
+        fullPalette.forEach((c, i) => colorIndexMap.set(c.hex, i));
+        snap.forEach(child => {
+            const hex = child.val();
+            if (typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex) && fullPalette.length < CHARS.length) {
+                const upperHex = hex.toUpperCase();
+                if (!colorIndexMap.has(upperHex)) {
+                    const newColor = { hex: upperHex, name: upperHex };
+                    fullPalette.push(newColor);
+                    colorIndexMap.set(upperHex, fullPalette.length - 1);
+                }
+            }
+        });
+        rebuildPaletteUI();
+    }
+
+    // Scroll horizontal con rueda en la barra de paleta
+    paletteBar.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        paletteBar.scrollLeft += e.deltaY;
+    }, { passive: false });
+
+    // Añadir color manual
     addCustomColorBtn.addEventListener("click", () => {
-        const hex = customColorInput.value.trim().toUpperCase();
+        const hex = customColorInput.value.trim();
         if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
             alert("Formato de color inválido. Usa #rrggbb (ej. #ff5733)");
             return;
@@ -165,33 +226,6 @@
         addColorToPalette(hex);
         customColorInput.value = "";
     });
-
-    // Función para añadir color automáticamente (usada también en importación)
-    function addColorToPalette(hex) {
-        if (colorIndexMap.has(hex)) return colorIndexMap.get(hex);
-        if (palette.length >= CHARS.length) {
-            // No se pueden añadir más, buscar el más cercano
-            return findClosestColorIndex(hex);
-        }
-        const newColor = { hex: hex, name: hex };
-        const index = palette.length;
-        palette.push(newColor);
-        colorIndexMap.set(hex, index);
-        paletteEl.appendChild(createSwatch(newColor, index));
-        return index;
-    }
-
-    function findClosestColorIndex(hex) {
-        const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-        let minDist = Infinity, idx = 0;
-        for (let i = 0; i < palette.length; i++) {
-            const h = palette[i].hex;
-            const pr = parseInt(h.slice(1,3),16), pg = parseInt(h.slice(3,5),16), pb = parseInt(h.slice(5,7),16);
-            const dist = Math.sqrt((r-pr)**2 + (g-pg)**2 + (b-pb)**2);
-            if (dist < minDist) { minDist = dist; idx = i; }
-        }
-        return idx;
-    }
 
     // ---------- CHUNKS ----------
     const boardChunks = {};
@@ -208,8 +242,8 @@
             for (let x = 0; x < CHUNK_SIZE; x++) {
                 const idx = y * CHUNK_SIZE + x;
                 const colorIdx = charToIdx(chunk[idx]);
-                if (colorIdx < palette.length) {
-                    ctx.fillStyle = palette[colorIdx].hex;
+                if (colorIdx < fullPalette.length) {
+                    ctx.fillStyle = fullPalette[colorIdx].hex;
                 } else {
                     ctx.fillStyle = "#000000";
                 }
@@ -322,7 +356,8 @@
         if (!hoverCell || isDragging) return;
         const { x, y } = hoverCell;
         const waiting = Date.now() < cooldownUntil && !isAdmin;
-        overlayCtx.fillStyle = hexToRgba(palette[selectedColor].hex, waiting ? 0.32 : 0.6);
+        const color = fullPalette[selectedColor] || fullPalette[0];
+        overlayCtx.fillStyle = hexToRgba(color.hex, waiting ? 0.32 : 0.6);
         overlayCtx.fillRect(x, y, 1, 1);
         overlayCtx.lineWidth = 0.14;
         overlayCtx.strokeStyle = waiting ? "#ff6f67" : "#5b8dff";
@@ -447,7 +482,6 @@
 
         const modifiedChunks = {};
         let pixelsPlaced = 0;
-        let addedColors = 0;
 
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
@@ -467,13 +501,19 @@
                 const localX = worldX - cx * CHUNK_SIZE;
                 const localY = worldY - cy * CHUNK_SIZE;
 
-                // Obtener índice del color, añadiéndolo a la paleta si es nuevo
                 let colorIdx;
                 if (colorIndexMap.has(hex)) {
                     colorIdx = colorIndexMap.get(hex);
                 } else {
-                    colorIdx = addColorToPalette(hex);
-                    if (palette.length <= CHARS.length) addedColors++;
+                    // Añadir color primero
+                    await addColorToPalette(hex);
+                    // El índice debe estar ya en el mapa, pero podría no haberse actualizado aún
+                    colorIdx = colorIndexMap.get(hex);
+                    if (colorIdx === undefined) {
+                        // fallback: buscar índice después de forzar recarga
+                        await loadCustomPalette();
+                        colorIdx = colorIndexMap.get(hex) || 0;
+                    }
                 }
 
                 modifiedChunks[key][localY * CHUNK_SIZE + localX] = idxToChar(colorIdx);
@@ -481,7 +521,6 @@
             }
         }
 
-        // Escribir localmente y en Firebase
         for (const [key, chunkArr] of Object.entries(modifiedChunks)) {
             boardChunks[key] = chunkArr.join('');
             const [cy, cx] = key.split('_').map(Number);
@@ -492,9 +531,7 @@
         if (pixelsPlaced > 0) {
             const countSnap = await countRef.once("value");
             await countRef.set((countSnap.val() || 0) + pixelsPlaced);
-            let msg = `✅ Imagen colocada (${pixelsPlaced} píxeles)`;
-            if (addedColors > 0) msg += ` · ${addedColors} colores nuevos añadidos`;
-            showToast(msg);
+            showToast(`✅ Imagen colocada (${pixelsPlaced} píxeles)`);
         }
         cancelImagePlacement();
     }
@@ -670,14 +707,23 @@
             return;
         }
 
+        // Preparar datos del píxel
+        const queueData = {
+            x: x,
+            y: y,
+            colorIndex: selectedColor,
+            uid: auth.currentUser.uid
+        };
+
+        // Si el color es personalizado (índice >= 24), incluir el hex
+        if (selectedColor >= basePalette.length) {
+            const hex = fullPalette[selectedColor].hex;
+            queueData.hex = hex;
+        }
+
         const queueRef = db.ref('lienzo/pixelQueue');
         try {
-            await queueRef.push({
-                x: x,
-                y: y,
-                colorIndex: selectedColor,
-                uid: auth.currentUser.uid
-            });
+            await queueRef.push(queueData);
 
             if (!isAdmin) {
                 cooldownUntil = Date.now() + COOLDOWN_MS;
@@ -762,6 +808,9 @@
         else syncText.textContent = "Sin conexión";
     });
 
-    fitToViewport();
-    updateVisibleChunks();
+    // Iniciar paleta y vista
+    loadCustomPalette().then(() => {
+        fitToViewport();
+        updateVisibleChunks();
+    });
 })();
