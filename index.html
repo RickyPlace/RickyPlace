@@ -3,67 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RickyPlace</title>
+    <title>RickyPlace — Lienzo colaborativo</title>
 
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="logo.png">
-
-    <!-- Google Fonts (Inter) -->
+    <link rel="icon" type="image/png" href="img/logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- Firebase compat SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 
     <style>
-        /* (estilos base igual que antes, solo agrego el panel flotante) */
         :root {
-            --bg: #121317;
-            --surface: #1a1c22;
-            --menu: #1c1f26;
-            --menu-2: #262a33;
-            --line: #30343d;
-            --text: #e9ebee;
-            --text-dim: #8b93a0;
-            --accent: #5b8dff;
-            --accent-soft: #1d2740;
-            --warn: #ff6f67;
-            --warn-soft: #3a1f1f;
+            --bg: #121317; --surface: #1a1c22; --menu: #1c1f26; --menu-2: #262a33;
+            --line: #30343d; --text: #e9ebee; --text-dim: #8b93a0; --accent: #5b8dff;
+            --accent-soft: #1d2740; --warn: #ff6f67; --warn-soft: #3a1f1f;
             --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.55);
             --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
             --sans: ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
             --missing-texture: repeating-linear-gradient(45deg, #ff00ff 0px, #ff00ff 10px, #000000 10px, #000000 20px);
         }
 
-        * {
-            box-sizing: border-box;
-            user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;
-        }
-        html, body {
-            margin:0; height:100%; background:var(--bg); color:var(--text);
-            font-family:var(--sans); overflow:hidden;
-        }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; }
+        html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:var(--sans); overflow:hidden; }
         body { display:flex; flex-direction:column; }
 
         header {
             display:flex; align-items:center; justify-content:space-between;
             padding:16px 28px; border-bottom: 4px solid transparent;
             border-image: var(--missing-texture) 1; background: var(--menu);
-            box-shadow: var(--shadow); flex-shrink:0; gap:24px; flex-wrap:wrap;
-            position:relative; z-index:20;
+            box-shadow: var(--shadow); flex-shrink:0; gap:24px; flex-wrap:wrap; position:relative; z-index:20;
         }
         .brand { display: flex; align-items: center; }
-        .logo {
-            height: 120px; width: auto; display: block; flex-shrink: 0;
-            filter: drop-shadow(0 8px 18px rgba(0,0,0,.7));
-        }
+        .logo { height: 120px; width: auto; display: block; flex-shrink: 0; filter: drop-shadow(0 8px 18px rgba(0,0,0,.7)); }
         .meta {
             font-size: 18px; color: var(--text-dim);
-            display:flex; gap:24px; flex-wrap:wrap; align-items:center;
-            flex: 1; justify-content: center;
+            display:flex; gap:24px; flex-wrap:wrap; align-items:center; flex: 1; justify-content: center;
         }
         .meta b { color:var(--text); font-weight:700; }
         .sync-status { display:flex; align-items:center; gap:10px; font-size:18px; }
@@ -76,24 +52,15 @@
             background: var(--missing-texture); background-size: 14px 14px;
             animation:none; box-shadow:0 0 0 0 rgba(255,0,255,.6);
         }
-        @keyframes pulse-dot {
-            0% { box-shadow:0 0 0 0 rgba(62,207,110,.5); }
-            70% { box-shadow:0 0 0 12px rgba(62,207,110,0); }
-            100% { box-shadow:0 0 0 0 rgba(62,207,110,0); }
-        }
-        @keyframes pulse-dot-fast {
-            0% { box-shadow:0 0 0 0 rgba(255,111,103,.6); }
-            70% { box-shadow:0 0 0 10px rgba(255,111,103,0); }
-            100% { box-shadow:0 0 0 0 rgba(255,111,103,0); }
-        }
+        @keyframes pulse-dot { 0% { box-shadow:0 0 0 0 rgba(62,207,110,.5); } 70% { box-shadow:0 0 0 12px rgba(62,207,110,0); } 100% { box-shadow:0 0 0 0 rgba(62,207,110,0); } }
+        @keyframes pulse-dot-fast { 0% { box-shadow:0 0 0 0 rgba(255,111,103,.6); } 70% { box-shadow:0 0 0 10px rgba(255,111,103,0); } 100% { box-shadow:0 0 0 0 rgba(255,111,103,0); } }
+
         .cooldown-box { display:flex; flex-direction:column; align-items:flex-end; gap:3px; min-width:110px; }
         .cooldown-label { font-size:14px; letter-spacing:.16em; color:var(--text-dim); text-transform:uppercase; }
-        .cooldown-time {
-            font-size: 42px; font-weight:700; font-variant-numeric:tabular-nums;
-            color:var(--warn); font-family:var(--mono);
-        }
+        .cooldown-time { font-size: 42px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--warn); font-family:var(--mono); }
         .cooldown-time.ready { color:var(--accent); }
         .cooldown-time.admin-mode { color: #f0c040; }
+
         #userUidDisplay {
             font-family: var(--mono); font-size: 13px; color: var(--text-dim);
             cursor: pointer; border-bottom: 1px dashed var(--text-dim);
@@ -137,12 +104,8 @@
         }
         .toast.warn { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
         .toast.notification { border-color: #f0c040; background: #1d2740; color: #ffffff; font-weight: 500; }
-        @keyframes fadeInDown {
-            from { opacity: 0; transform: translateY(-12px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Barra inferior */
         .palette-bar {
             flex-shrink: 0; background: var(--menu);
             border-top: 4px solid transparent; border-image: var(--missing-texture) 1;
@@ -157,20 +120,16 @@
         .palette-swatches { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
         .swatch {
             width: 56px; height: 56px; border-radius: 6px; cursor: pointer;
-            position: relative; border: 2px solid var(--line); flex-shrink: 0;
-            transition: transform 0.1s;
+            position: relative; border: 2px solid var(--line); flex-shrink: 0; transition: transform 0.1s;
         }
         .swatch:hover { transform: scale(1.3); z-index: 1; }
         .swatch.selected { box-shadow: 0 0 0 2px var(--surface), 0 0 0 7px var(--accent); }
         .swatch.selected::after {
             content: "✓"; position: absolute; inset: 0;
             display: flex; align-items: center; justify-content: center;
-            font-size: 24px; font-weight: bold; color: #000;
-            text-shadow: 0 0 3px rgba(255,255,255,.7);
+            font-size: 24px; font-weight: bold; color: #000; text-shadow: 0 0 3px rgba(255,255,255,.7);
         }
-        .custom-color {
-            display: flex; gap: 10px; flex-shrink: 0; margin-left: auto; align-items: center;
-        }
+        .custom-color { display: flex; gap: 10px; flex-shrink: 0; margin-left: auto; align-items: center; }
         .custom-color input {
             width: 150px; background: var(--menu-2); border: 1px solid var(--line);
             color: var(--text); padding: 10px 12px; border-radius: 5px;
@@ -183,7 +142,6 @@
         }
         .custom-color button:hover { opacity: 0.9; }
 
-        /* Panel de administración (solo admin) */
         .admin-panel {
             display: none; gap: 8px; align-items: center; margin-left: 12px;
         }
@@ -193,29 +151,18 @@
             cursor: pointer; white-space: nowrap;
         }
         .admin-panel button:hover { background: var(--warn); color: #fff; }
-        .admin-panel .import-btn {
-            background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
-        }
+        .admin-panel .import-btn { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
         .admin-panel .import-btn:hover { background: var(--accent); color: #fff; }
 
-        /* Panel flotante para colocar imagen */
         .image-float-controls {
             position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
             display: none; gap: 12px; z-index: 25; background: rgba(26,28,34,0.95);
             padding: 12px 20px; border-radius: 10px; border: 1px solid var(--accent);
             box-shadow: 0 0 20px rgba(0,0,0,0.8);
         }
-        .image-float-controls button {
-            padding: 10px 18px; border-radius: 6px; font-size: 16px; font-weight: 600;
-            cursor: pointer; border: none;
-        }
-        .image-float-controls .confirm-btn {
-            background: var(--accent); color: #fff;
-        }
-        .image-float-controls .cancel-btn {
-            background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn);
-        }
-        .image-float-controls button:hover { opacity: 0.9; }
+        .image-float-controls button { padding: 10px 18px; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; border: none; }
+        .image-float-controls .confirm-btn { background: var(--accent); color: #fff; }
+        .image-float-controls .cancel-btn { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
 
         #importImageFile { display: none; }
         .palette-bar::-webkit-scrollbar { height: 10px; }
@@ -231,7 +178,7 @@
 </head>
 <body>
     <header>
-        <div class="brand"><img src="logo.png" alt="Logo RickyPlace" class="logo"></div>
+        <div class="brand"><img src="img/logo.png" alt="Logo RickyPlace" class="logo"></div>
         <div class="meta">
             <span>Cuadrícula <b id="gridSizeLabel">1000×1000</b></span>
             <span>Píxeles colocados <b id="placementCount">—</b></span>
@@ -258,7 +205,6 @@
                 <button id="zoomFit" title="Centrar">⤢</button>
             </div>
             <div id="toast-container"></div>
-            <!-- Controles flotantes para imagen -->
             <div class="image-float-controls" id="imageFloatControls">
                 <button class="confirm-btn" id="confirmImageFloatBtn">✅ Colocar imagen</button>
                 <button class="cancel-btn" id="cancelImageFloatBtn">❌ Cancelar</button>
@@ -266,7 +212,7 @@
         </div>
     </main>
 
-    <div class="palette-bar">
+    <div class="palette-bar" id="paletteBar">
         <span class="palette-title">Paleta — <span id="selectedColorName">Blanco</span></span>
         <div class="palette-swatches" id="palette"></div>
         <div class="custom-color">
