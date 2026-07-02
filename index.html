@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RickyPlace — Lienzo colaborativo</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="logo.png">
+
+    <!-- Google Fonts (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Firebase compat SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+
+    <style>
+        :root {
+            --bg: #121317;
+            --surface: #1a1c22;
+            --menu: #1c1f26;
+            --menu-2: #262a33;
+            --line: #30343d;
+            --text: #e9ebee;
+            --text-dim: #8b93a0;
+            --accent: #5b8dff;
+            --accent-soft: #1d2740;
+            --warn: #ff6f67;
+            --warn-soft: #3a1f1f;
+            --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.55);
+            --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+            --sans: ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+            --missing-texture: repeating-linear-gradient(
+                45deg,
+                #ff00ff 0px,
+                #ff00ff 10px,
+                #000000 10px,
+                #000000 20px
+            );
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+
+        html, body {
+            margin:0; height:100%; background:var(--bg); color:var(--text);
+            font-family:var(--sans); overflow:hidden;
+        }
+        body { display:flex; flex-direction:column; }
+
+        header {
+            display:flex; align-items:center; justify-content:space-between;
+            padding:16px 28px;
+            border-bottom: 4px solid transparent;
+            border-image: var(--missing-texture) 1;
+            background: var(--menu);
+            box-shadow: var(--shadow);
+            flex-shrink:0; gap:24px; flex-wrap:wrap; position:relative; z-index:20;
+        }
+
+        .brand { display: flex; align-items: center; }
+        .logo {
+            height: 120px; width: auto; display: block; flex-shrink: 0;
+            filter: drop-shadow(0 8px 18px rgba(0,0,0,.7));
+        }
+
+        .meta {
+            font-size: 18px; color: var(--text-dim);
+            display:flex; gap:24px; flex-wrap:wrap; align-items:center;
+            flex: 1; justify-content: center;
+        }
+        .meta b { color:var(--text); font-weight:700; }
+
+        .sync-status { display:flex; align-items:center; gap:10px; font-size:18px; }
+        .live-dot {
+            width:14px; height:14px; border-radius:50%;
+            background:#3ecf6e; flex-shrink:0;
+            box-shadow:0 0 0 0 rgba(62,207,110,.6);
+            animation:pulse-dot 2s infinite;
+        }
+        .live-dot.saving { background:var(--warn); animation:pulse-dot-fast 0.6s infinite; }
+        .live-dot.disconnected {
+            background: var(--missing-texture);
+            background-size: 14px 14px; animation:none;
+            box-shadow:0 0 0 0 rgba(255,0,255,.6);
+        }
+        @keyframes pulse-dot { 0% { box-shadow:0 0 0 0 rgba(62,207,110,.5); } 70% { box-shadow:0 0 0 12px rgba(62,207,110,0); } 100% { box-shadow:0 0 0 0 rgba(62,207,110,0); } }
+        @keyframes pulse-dot-fast { 0% { box-shadow:0 0 0 0 rgba(255,111,103,.6); } 70% { box-shadow:0 0 0 10px rgba(255,111,103,0); } 100% { box-shadow:0 0 0 0 rgba(255,111,103,0); } }
+
+        .cooldown-box { display:flex; flex-direction:column; align-items:flex-end; gap:3px; min-width:110px; }
+        .cooldown-label { font-size:14px; letter-spacing:.16em; color:var(--text-dim); text-transform:uppercase; }
+        .cooldown-time {
+            font-size: 42px; font-weight:700; font-variant-numeric:tabular-nums;
+            color:var(--warn); font-family:var(--mono);
+        }
+        .cooldown-time.ready { color:var(--accent); }
+        .cooldown-time.admin-mode { color: #f0c040; }
+
+        #userUidDisplay {
+            font-family: var(--mono); font-size: 13px; color: var(--text-dim);
+            cursor: pointer; border-bottom: 1px dashed var(--text-dim);
+            padding: 2px 6px; transition: color 0.2s; white-space: nowrap;
+        }
+        #userUidDisplay:hover { color: var(--text); }
+
+        main { flex:1; display:flex; min-height:0; }
+        .viewport { flex:1; position:relative; overflow:hidden; background:var(--bg); cursor:grab; }
+        .viewport.dragging { cursor:grabbing; }
+        #board, #hoverOverlay { position:absolute; top:0; left:0; image-rendering:pixelated; image-rendering:crisp-edges; transform-origin:0 0; }
+        #board { touch-action:none; box-shadow:0 0 0 1px var(--line), var(--shadow); background:#fff; z-index:1; }
+        #hoverOverlay { pointer-events:none; z-index:2; }
+
+        .zoom-controls { position:absolute; right:28px; bottom:140px; display:flex; flex-direction:column; gap:3px; border:1px solid var(--line); border-radius:10px; overflow:hidden; z-index:6; background:var(--surface); box-shadow:var(--shadow); }
+        .zoom-controls button { width:48px; height:48px; background:var(--surface); color:var(--text); border:none; font-family:var(--sans); font-size:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+        .zoom-controls button:hover { background:var(--menu); color:var(--accent); }
+
+        #toast-container {
+            position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column-reverse; align-items: center; gap: 10px;
+            z-index: 10; pointer-events: none;
+        }
+
+        .toast {
+            background: rgba(26, 28, 34, 0.95); border: 1px solid var(--line);
+            color: var(--text); padding: 14px 26px; border-radius: 10px;
+            font-size: 17px; box-shadow: 0 0 18px rgba(0,0,0,0.8);
+            white-space: nowrap; pointer-events: auto;
+            animation: fadeInDown 0.25s ease; transition: opacity 0.3s, transform 0.3s;
+        }
+        .toast.warn { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+        .toast.notification { border-color: #f0c040; background: #1d2740; color: #ffffff; font-weight: 500; }
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Barra inferior */
+        .palette-bar {
+            flex-shrink: 0;
+            background: var(--menu);
+            border-top: 4px solid transparent;
+            border-image: var(--missing-texture) 1;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            z-index: 20;
+            box-shadow: 0 -4px 16px rgba(0,0,0,0.8);
+        }
+
+        .palette-bar .palette-title {
+            font-size: 16px; letter-spacing: .18em; text-transform: uppercase;
+            color: var(--text-dim); font-weight: 700; flex-shrink: 0; margin-right: 8px;
+        }
+
+        .palette-swatches {
+            display: flex; gap: 10px; align-items: center; flex-shrink: 0;
+        }
+
+        .swatch {
+            width: 56px; height: 56px; border-radius: 6px; cursor: pointer;
+            position: relative; border: 2px solid var(--line); flex-shrink: 0;
+            transition: transform 0.1s;
+        }
+        .swatch:hover { transform: scale(1.3); z-index: 1; }
+        .swatch.selected {
+            box-shadow: 0 0 0 2px var(--surface), 0 0 0 7px var(--accent);
+        }
+        .swatch.selected::after {
+            content: "✓"; position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; font-weight: bold; color: #000;
+            text-shadow: 0 0 3px rgba(255,255,255,.7);
+        }
+
+        .custom-color {
+            display: flex; gap: 10px; flex-shrink: 0; margin-left: auto; align-items: center;
+        }
+
+        .custom-color input {
+            width: 150px; background: var(--menu-2); border: 1px solid var(--line);
+            color: var(--text); padding: 10px 12px; border-radius: 5px;
+            font-family: var(--mono); font-size: 15px;
+        }
+
+        .custom-color button {
+            background: var(--accent); color: #fff; border: none;
+            padding: 10px 16px; border-radius: 5px; font-weight: 600;
+            cursor: pointer; font-size: 15px; white-space: nowrap;
+        }
+        .custom-color button:hover { opacity: 0.9; }
+
+        /* Panel de administración (solo admin) */
+        .admin-panel {
+            display: none;
+            gap: 8px;
+            align-items: center;
+            margin-left: 12px;
+        }
+        .admin-panel button {
+            background: var(--warn-soft);
+            color: var(--warn);
+            border: 1px solid var(--warn);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .admin-panel button:hover { background: var(--warn); color: #fff; }
+        .admin-panel .import-btn {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        .admin-panel .import-btn:hover { background: var(--accent); color: #fff; }
+
+        /* Controles de colocación de imagen */
+        .image-placement-controls {
+            display: none;
+            gap: 8px;
+            align-items: center;
+            margin-left: 12px;
+        }
+        .image-placement-controls button {
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .image-placement-controls .confirm-btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+        }
+        .image-placement-controls .cancel-btn {
+            background: var(--warn-soft);
+            color: var(--warn);
+            border: 1px solid var(--warn);
+        }
+
+        #importImageFile { display: none; }
+
+        .palette-bar::-webkit-scrollbar { height: 10px; }
+        .palette-bar::-webkit-scrollbar-thumb { background: var(--menu-2); border-radius: 5px; }
+
+        @media (max-width:760px) {
+            .logo { height: 80px; }
+            .meta { font-size: 14px; gap: 14px; }
+            .swatch { width: 40px; height: 40px; }
+            .palette-bar { padding: 12px 16px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <img src="logo.png" alt="Logo RickyPlace" class="logo">
+        </div>
+        <div class="meta">
+            <span>Cuadrícula <b id="gridSizeLabel">1000×1000</b></span>
+            <span>Píxeles colocados <b id="placementCount">—</b></span>
+            <span id="lastActivityMeta">Sin actividad aún</span>
+            <span class="sync-status" id="syncStatus">
+                <span class="live-dot" id="liveDot"></span>
+                <span id="syncText">Conectando…</span>
+            </span>
+            <span id="userUidDisplay" title="Haz clic para copiar tu UID">—</span>
+        </div>
+        <div class="cooldown-box">
+            <span class="cooldown-label">Próximo píxel</span>
+            <span class="cooldown-time ready" id="cooldownTime">LISTO</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="viewport" id="viewport">
+            <canvas id="board"></canvas>
+            <canvas id="hoverOverlay"></canvas>
+            <div class="zoom-controls">
+                <button id="zoomIn" title="Acercar">+</button>
+                <button id="zoomOut" title="Alejar">−</button>
+                <button id="zoomFit" title="Centrar">⤢</button>
+            </div>
+            <div id="toast-container"></div>
+        </div>
+    </main>
+
+    <div class="palette-bar">
+        <span class="palette-title">Paleta — <span id="selectedColorName">Blanco</span></span>
+        <div class="palette-swatches" id="palette"></div>
+        <div class="custom-color">
+            <input type="text" id="customColorInput" placeholder="#ff5733" maxlength="7">
+            <button id="addCustomColor">Añadir</button>
+        </div>
+        <div class="admin-panel" id="adminPanel">
+            <button class="import-btn" id="adminImportBtn">🖼️ Importar imagen</button>
+            <button id="adminClearBtn">🗑️ Limpiar lienzo</button>
+            <input type="file" id="importImageFile" accept="image/png, image/jpeg, image/gif, image/webp">
+        </div>
+        <div class="image-placement-controls" id="imagePlacementControls">
+            <button class="confirm-btn" id="confirmImageBtn">✅ Confirmar colocación</button>
+            <button class="cancel-btn" id="cancelImageBtn">❌ Cancelar</button>
+        </div>
+    </div>
+
+    <script src="app.js" defer></script>
+</body>
+</html>
