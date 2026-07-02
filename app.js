@@ -112,10 +112,10 @@
     const adminImportBtn = document.getElementById("adminImportBtn");
     const importImageFile = document.getElementById("importImageFile");
     const adminClearBtn = document.getElementById("adminClearBtn");
-    // Controles de colocación
-    const imagePlacementControls = document.getElementById("imagePlacementControls");
-    const confirmImageBtn = document.getElementById("confirmImageBtn");
-    const cancelImageBtn = document.getElementById("cancelImageBtn");
+    // Controles de imagen flotantes
+    const imageFloatControls = document.getElementById("imageFloatControls");
+    const confirmImageFloatBtn = document.getElementById("confirmImageFloatBtn");
+    const cancelImageFloatBtn = document.getElementById("cancelImageFloatBtn");
 
     gridSizeLabel.textContent = "1000×1000";
     canvas.width = W;
@@ -342,7 +342,7 @@
         }
     });
 
-    // ---------- IMPORTACIÓN DE IMÁGENES (solo admin) ----------
+    // ---------- IMPORTACIÓN DE IMÁGENES (admin) ----------
     let imagePlacementActive = false;
     let imageToPlace = null;
     let imageScale = 100;
@@ -371,7 +371,7 @@
         viewport.style.cursor = "grab";
         overlayCtx.clearRect(0, 0, W, H);
         drawHoverOverlay();
-        if (imagePlacementControls) imagePlacementControls.style.display = 'none';
+        if (imageFloatControls) imageFloatControls.style.display = 'none';
         if (adminImportBtn) adminImportBtn.style.display = 'inline-block';
     }
 
@@ -398,8 +398,7 @@
                     imagePlacementActive = true;
                     viewport.style.cursor = "move";
                     drawImagePreview();
-                    // Mostrar controles de colocación
-                    if (imagePlacementControls) imagePlacementControls.style.display = 'flex';
+                    if (imageFloatControls) imageFloatControls.style.display = 'flex';
                     if (adminImportBtn) adminImportBtn.style.display = 'none';
                 };
                 img.src = ev.target.result;
@@ -409,15 +408,14 @@
         });
     }
 
-    // Confirmar colocación
-    if (confirmImageBtn) {
-        confirmImageBtn.addEventListener("click", async () => {
+    if (confirmImageFloatBtn) {
+        confirmImageFloatBtn.addEventListener("click", async () => {
             if (!imagePlacementActive || !isAdmin) return;
             await placeImageOnCanvas();
         });
     }
-    if (cancelImageBtn) {
-        cancelImageBtn.addEventListener("click", () => {
+    if (cancelImageFloatBtn) {
+        cancelImageFloatBtn.addEventListener("click", () => {
             cancelImagePlacement();
         });
     }
@@ -477,16 +475,13 @@
             if (!isAdmin) return;
             if (!confirm("⚠️ ¿Seguro que quieres borrar TODO el lienzo?")) return;
             try {
-                // Primero eliminar todos los chunks
                 for (let cy = 0; cy < CHUNKS_Y; cy++) {
                     for (let cx = 0; cx < CHUNKS_X; cx++) {
                         await chunksRef.child(`${cy}_${cx}`).set(new Array(CHUNK_SIZE * CHUNK_SIZE).fill(0).map(idxToChar).join(''));
                     }
                 }
-                // Reiniciar contador y actividad
                 await countRef.set(0);
                 await activityRef.set({ x: 0, y: 0, c: 0, t: firebase.database.ServerValue.TIMESTAMP });
-                // Limpiar variables locales
                 for (const key in boardChunks) delete boardChunks[key];
                 ctx.clearRect(0, 0, W, H);
                 showToast("🗑️ Lienzo limpiado");
