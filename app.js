@@ -112,7 +112,7 @@
     const adminImportBtn = document.getElementById("adminImportBtn");
     const importImageFile = document.getElementById("importImageFile");
     const adminClearBtn = document.getElementById("adminClearBtn");
-    // Controles de imagen flotantes
+    // Controles flotantes
     const imageFloatControls = document.getElementById("imageFloatControls");
     const confirmImageFloatBtn = document.getElementById("confirmImageFloatBtn");
     const cancelImageFloatBtn = document.getElementById("cancelImageFloatBtn");
@@ -155,27 +155,43 @@
     buildPalette();
     selectedColorNameEl.textContent = palette[selectedColor].name;
 
+    // Añadir color personalizado (manual)
     addCustomColorBtn.addEventListener("click", () => {
         const hex = customColorInput.value.trim().toUpperCase();
         if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
             alert("Formato de color inválido. Usa #rrggbb (ej. #ff5733)");
             return;
         }
-        if (colorIndexMap.has(hex)) {
-            alert("Ese color ya está en la paleta.");
-            return;
-        }
+        addColorToPalette(hex);
+        customColorInput.value = "";
+    });
+
+    // Función para añadir color automáticamente (usada también en importación)
+    function addColorToPalette(hex) {
+        if (colorIndexMap.has(hex)) return colorIndexMap.get(hex);
         if (palette.length >= CHARS.length) {
-            alert("Has alcanzado el máximo de colores permitidos.");
-            return;
+            // No se pueden añadir más, buscar el más cercano
+            return findClosestColorIndex(hex);
         }
         const newColor = { hex: hex, name: hex };
         const index = palette.length;
         palette.push(newColor);
         colorIndexMap.set(hex, index);
         paletteEl.appendChild(createSwatch(newColor, index));
-        customColorInput.value = "";
-    });
+        return index;
+    }
+
+    function findClosestColorIndex(hex) {
+        const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        let minDist = Infinity, idx = 0;
+        for (let i = 0; i < palette.length; i++) {
+            const h = palette[i].hex;
+            const pr = parseInt(h.slice(1,3),16), pg = parseInt(h.slice(3,5),16), pb = parseInt(h.slice(5,7),16);
+            const dist = Math.sqrt((r-pr)**2 + (g-pg)**2 + (b-pb)**2);
+            if (dist < minDist) { minDist = dist; idx = i; }
+        }
+        return idx;
+    }
 
     // ---------- CHUNKS ----------
     const boardChunks = {};
@@ -431,6 +447,8 @@
 
         const modifiedChunks = {};
         let pixelsPlaced = 0;
+        let addedColors = 0;
+
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
                 const idx = (y * w + x) * 4;
@@ -448,12 +466,22 @@
                 }
                 const localX = worldX - cx * CHUNK_SIZE;
                 const localY = worldY - cy * CHUNK_SIZE;
-                let colorIdx = colorIndexMap.has(hex) ? colorIndexMap.get(hex) : 0;
+
+                // Obtener índice del color, añadiéndolo a la paleta si es nuevo
+                let colorIdx;
+                if (colorIndexMap.has(hex)) {
+                    colorIdx = colorIndexMap.get(hex);
+                } else {
+                    colorIdx = addColorToPalette(hex);
+                    if (palette.length <= CHARS.length) addedColors++;
+                }
+
                 modifiedChunks[key][localY * CHUNK_SIZE + localX] = idxToChar(colorIdx);
                 pixelsPlaced++;
             }
         }
 
+        // Escribir localmente y en Firebase
         for (const [key, chunkArr] of Object.entries(modifiedChunks)) {
             boardChunks[key] = chunkArr.join('');
             const [cy, cx] = key.split('_').map(Number);
@@ -464,7 +492,9 @@
         if (pixelsPlaced > 0) {
             const countSnap = await countRef.once("value");
             await countRef.set((countSnap.val() || 0) + pixelsPlaced);
-            showToast(`✅ Imagen colocada (${pixelsPlaced} píxeles)`);
+            let msg = `✅ Imagen colocada (${pixelsPlaced} píxeles)`;
+            if (addedColors > 0) msg += ` · ${addedColors} colores nuevos añadidos`;
+            showToast(msg);
         }
         cancelImagePlacement();
     }
